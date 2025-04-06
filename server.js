@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const fs = require('fs');
+const fs = require('fs').promises;
 const { exec } = require('child_process');
 const path = require('path');
 
@@ -76,22 +76,56 @@ public class Main {
 `.trim();
 }
 
+// Create a temporary directory for Java compilation and execution
+async function createTempDirectory() {
+    const tempDir = path.join(__dirname, 'temp_' + Date.now());
+    await fs.mkdir(tempDir, { recursive: true });
+    return tempDir;
+}
 
 // POST endpoint to transform and execute the code
 app.post('/transform-run', async (req, res) => {
+    let tempDir = null;
+    
     try {
         const userCode = req.body.code;
         const transformedCode = transformJavaCode(userCode);
-        const filePath = path.join(__dirname, 'Main.java');
-        fs.writeFileSync(filePath, transformedCode);
-
-        exec(`javac Main.java && java Main`, { timeout: 10000 }, (err, stdout, stderr) => {
-            if (err) {
-                return res.status(500).send("Compilation/Execution error:\n" + stderr);
+        
+        // Create a temporary directory for this execution
+        tempDir = await createTempDirectory();
+        const filePath = path.join(tempDir, 'Main.java');
+        
+        // Write the transformed code to the file
+        await fs.writeFile(filePath, transformedCode);
+        
+        // Execute the code in the temporary directory
+        exec(`javac Main.java && java Main`, { 
+            timeout: 30000, // Increased timeout to 30 seconds
+            cwd: tempDir  // Set working directory to the temp directory
+        }, async (err, stdout, stderr) => {
+            try {
+                if (err) {
+                    return res.status(500).send("Compilation/Execution error:\n" + stderr);
+                }
+                res.send(stdout);
+            } finally {
+                // Cleanup: delete the temporary files
+                try {
+                    await fs.rm(tempDir, { recursive: true, force: true });
+                } catch (cleanupErr) {
+                    console.error('Error cleaning up temp directory:', cleanupErr);
+                }
             }
-            res.send(stdout);
         });
     } catch (e) {
+        // Ensure cleanup happens even if there's an error
+        if (tempDir) {
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch (cleanupErr) {
+                console.error('Error cleaning up temp directory:', cleanupErr);
+            }
+        }
         res.status(400).send("Transformation failed: " + e.message);
     }
 });
