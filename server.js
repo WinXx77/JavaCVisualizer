@@ -90,8 +90,12 @@ public class Main {
 }
 
 // POST endpoint to transform and execute the code
+const { exec, spawn } = require('child_process');
+
 app.post('/transform-run', async (req, res) => {
     const filePath = path.join(__dirname, 'Main.java');
+    const asciinemaFile = path.join(__dirname, 'session.cast');
+    const svgFile = path.join(__dirname, 'output.svg');
 
     try {
         const userCode = req.body.code;
@@ -100,31 +104,43 @@ app.post('/transform-run', async (req, res) => {
         }
 
         const transformedCode = transformJavaCode(userCode);
-        console.log("Generated Java code:\n", transformedCode);
+        await fs.writeFile(filePath, transformedCode, 'utf8');
 
-        await fs.writeFile(filePath, transformedCode, { encoding: 'utf8' });
-        console.log("File written successfully:", filePath);
+        // Compile the code
+        await execPromise(`javac -encoding UTF-8 Main.java`);
 
-        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 20000 }, (err, stdout, stderr) => {
-            fs.unlink(filePath).catch((unlinkErr) => {
-                console.error("Failed to delete file:", unlinkErr);
-            });
+        // Run Java program using asciinema
+        await execPromise(`asciinema rec -c "java Main" -y ${asciinemaFile}`);
 
-            if (err) {
-                console.error("Execution stderr:", stderr);
-                console.error("Execution error:", err);
-                return res.status(500).send(`Execution failed:\n${stderr || err.message}`);
-            }
+        // Convert to SVG
+        await execPromise(`svg-term --in ${asciinemaFile} --out ${svgFile} --window --frame --no-cursor`);
 
-            console.log("Execution stdout:", stdout);
-            res.send(stdout);
-        });
+        const svg = await fs.readFile(svgFile, 'utf8');
+
+        // Cleanup
+        await fs.unlink(filePath).catch(() => {});
+        await fs.unlink(asciinemaFile).catch(() => {});
+        await fs.unlink(svgFile).catch(() => {});
+
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.send(svg);
+
     } catch (e) {
         await fs.unlink(filePath).catch(() => {});
-        console.error("Transformation error:", e);
-        res.status(400).send("Transformation failed: " + e.message);
+        res.status(500).send(`Error: ${e.message}`);
     }
 });
+
+// Utility to promisify exec
+function execPromise(cmd) {
+    return new Promise((resolve, reject) => {
+        exec(cmd, { maxBuffer: 1024 * 500 }, (err, stdout, stderr) => {
+            if (err) return reject(err);
+            resolve(stdout);
+        });
+    });
+}
+
 
 // Basic GET route
 app.get('/', (req, res) => {
