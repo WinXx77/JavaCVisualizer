@@ -9,54 +9,43 @@ const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json({ limit: '1mb' }));
 
-// Transforms user's Java code into animated trace version
+// Transforms user's Java code into an animated trace version
 function transformJavaCode(inputCode) {
+    // Extract function name and parameter from the user's code
     const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
-    if (!match) throw new Error('No valid recursive int method found.');
+    if (!match) throw new Error('No valid recursive int method found in the input code.');
     const functionName = match[1];
     const param = match[2];
 
+    // Generate the transformed Java code with proper string handling
     return `
 public class Main {
-
     public static int ${functionName}(int ${param}, int depth) throws InterruptedException {
-        String indent = "│   ".repeat(depth);
+        String indent = "|   ".repeat(depth); // Using ASCII '|' for simplicity and compatibility
 
-        printWithDelay(indent + "├──> Entering ${functionName}(" + ${param} + ")", 400);
-        printWithDelay(indent + "│   Recursion depth: " + depth, 300);
-        printWithDelay(indent + "│   Pushing state to stack for ${param} = " + ${param}, 300);
-        printWithDelay(indent + "│   Checking if " + ${param} + " == 0", 300);
+        // Entering the function
+        printWithDelay(indent + "---> Entering ${functionName}(" + ${param} + ")", 400);
+        printWithDelay(indent + "    Recursion depth: " + depth, 300);
+        printWithDelay(indent + "    Checking base case: " + ${param} + " == 0", 300);
 
+        // Base case
         if (${param} == 0) {
-            printWithDelay(indent + "│   Base case reached", 300);
-            printWithDelay(indent + "│   Initializing return value with 1", 300);
-            printWithDelay(indent + "│   Preparing to return from ${functionName}(0)", 300);
-            printWithDelay(indent + "│   Saving result 1 in memory", 300);
-            printWithDelay(indent + "│   Popping state from stack for ${param} = 0", 300);
-            printWithDelay(indent + "│   └──> return 1", 400);
+            printWithDelay(indent + "    Base case reached, returning 1", 300);
+            printWithDelay(indent + "<--- Returning 1 from ${functionName}(0)", 400);
             return 1;
         }
 
-        printWithDelay(indent + "│   Will compute: " + ${param} + " * ${functionName}(" + (${param} - 1) + ")", 400);
-        printWithDelay(indent + "│   Saving state: waiting for result of ${functionName}(" + (${param} - 1) + ")", 300);
-        printWithDelay(indent + "│   Calling ${functionName}(" + (${param} - 1) + ") at depth " + (depth + 1), 300);
-        printWithDelay(indent + "│   Going deeper into ${functionName}(" + (${param} - 1) + ")", 300);
+        // Recursive case
+        int nextParam = ${param} - 1;
+        printWithDelay(indent + "    Will compute: " + ${param} + " * ${functionName}(" + nextParam + ")", 400);
+        printWithDelay(indent + "    Calling ${functionName}(" + nextParam + ") at depth " + (depth + 1), 300);
 
-        int recursiveResult = ${functionName}(${param} - 1, depth + 1);
+        int recursiveResult = ${functionName}(nextParam, depth + 1);
 
-        printWithDelay(indent + "│   Returned from ${functionName}(" + (${param} - 1) + ") with result " + recursiveResult, 300);
+        printWithDelay(indent + "    Returned from ${functionName}(" + nextParam + ") with " + recursiveResult, 300);
         int result = ${param} * recursiveResult;
-        printWithDelay(indent + "│   Computing: " + ${param} + " * " + recursiveResult + " = " + result, 400);
-        printWithDelay(indent + "│   Computation complete for ${functionName}(" + ${param} + ")", 300);
-        printWithDelay(indent + "│   Storing result " + result + " temporarily", 300);
-        printWithDelay(indent + "│   Stack trace: ${functionName}(" + ${param} + ") → ${functionName}(" + (${param} - 1) + ")", 300);
-        printWithDelay(indent + "│   Cleaning up temporary memory used for ${functionName}(" + ${param} + ")", 300);
-        printWithDelay(indent + "│   Popping state from stack for ${param} = " + ${param}, 300);
-        printWithDelay(indent + "│   Preparing to return result to caller", 300);
-        printWithDelay(indent + "│   Exiting ${functionName}(" + ${param} + ")", 300);
-        printWithDelay(indent + "│   Returning value: " + result, 300);
-        printWithDelay(indent + "│   Historical trace: ${functionName}(" + ${param} + ") = " + result, 300);
-        printWithDelay(indent + "│   └──> return " + result, 400);
+        printWithDelay(indent + "    Computed: " + ${param} + " * " + recursiveResult + " = " + result, 400);
+        printWithDelay(indent + "<--- Returning " + result + " from ${functionName}(" + ${param} + ")", 400);
 
         return result;
     }
@@ -67,9 +56,9 @@ public class Main {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int number = 5;
-        System.out.println("Animated Recursion Trace for ${functionName}(" + number + "):\\n");
-        int result = ${functionName}(number, 0);
+        int input = 5; // Default input value
+        System.out.println("Animated Recursion Trace for ${functionName}(" + input + "):\\n");
+        int result = ${functionName}(input, 0);
         printWithDelay("\\nFinal Result: " + result, 0);
     }
 }
@@ -80,13 +69,25 @@ public class Main {
 app.post('/transform-run', async (req, res) => {
     try {
         const userCode = req.body.code;
+        if (!userCode || typeof userCode !== 'string') {
+            return res.status(400).send("Invalid input: 'code' must be a non-empty string.");
+        }
+
         const transformedCode = transformJavaCode(userCode);
         const filePath = path.join(__dirname, 'Main.java');
-        fs.writeFileSync(filePath, transformedCode);
 
-        // Add -encoding UTF-8 to the javac command
-        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 10000 }, (err, stdout, stderr) => {
+        // Write the file with explicit UTF-8 encoding
+        fs.writeFileSync(filePath, transformedCode, { encoding: 'utf8' });
+
+        // Compile and run with UTF-8 encoding
+        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 15000 }, (err, stdout, stderr) => {
+            // Clean up the generated file regardless of success or failure
+            fs.unlink(filePath, (unlinkErr) => {
+                if (unlinkErr) console.error(`Failed to delete ${filePath}: ${unlinkErr}`);
+            });
+
             if (err) {
+                console.error("Execution error:", stderr);
                 return res.status(500).send("Compilation/Execution error:\n" + stderr);
             }
             res.send(stdout);
