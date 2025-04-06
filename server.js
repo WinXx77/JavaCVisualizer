@@ -26,7 +26,7 @@ app.use(
   })
 );
 
-// Ensure temp directory exists
+// Ensure base temp directory exists
 async function ensureTempDir() {
   try {
     await fs.mkdir(TEMP_DIR, { recursive: true });
@@ -119,12 +119,14 @@ public class Main {
 // POST endpoint: transforms code, compiles, runs, and streams SVG
 app.post('/transform-run', async (req, res) => {
   const timestamp = Date.now();
-  const filePath = path.join(TEMP_DIR, `Main-${timestamp}.java`);
-  const asciinemaFile = path.join(TEMP_DIR, `session-${timestamp}.cast`);
-  const svgFile = path.join(TEMP_DIR, `output-${timestamp}.svg`);
+  const requestTempDir = path.join(TEMP_DIR, `request-${timestamp}`);
+  const filePath = path.join(requestTempDir, 'Main.java'); // Fixed file name
+  const asciinemaFile = path.join(requestTempDir, `session-${timestamp}.cast`);
+  const svgFile = path.join(requestTempDir, `output-${timestamp}.svg`);
 
   try {
-    await ensureTempDir();
+    // Create a unique temp directory for this request
+    await fs.mkdir(requestTempDir, { recursive: true });
 
     // Validate and extract request body
     const { code, options } = req.body;
@@ -146,7 +148,7 @@ app.post('/transform-run', async (req, res) => {
 
     // Record execution with asciinema
     await execPromise(
-      `TERM=xterm asciinema rec -y --stdin --command="java -cp ${TEMP_DIR} Main" ${asciinemaFile}`,
+      `TERM=xterm asciinema rec -y --stdin --command="java -cp ${requestTempDir} Main" ${asciinemaFile}`,
       { timeout: 30000 }
     );
 
@@ -163,12 +165,8 @@ app.post('/transform-run', async (req, res) => {
   } catch (e) {
     res.status(500).send(`Error: ${e.message}`);
   } finally {
-    // Cleanup temporary files
-    await Promise.all([
-      fs.unlink(filePath).catch(() => {}),
-      fs.unlink(asciinemaFile).catch(() => {}),
-      fs.unlink(svgFile).catch(() => {}),
-    ]);
+    // Cleanup: remove the entire request-specific temp directory
+    await fs.rm(requestTempDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
