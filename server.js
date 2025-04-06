@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs').promises;
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
+
 const path = require('path');
 
 const app = express();
@@ -90,7 +91,7 @@ public class Main {
 }
 
 // POST endpoint to transform and execute the code
-const { exec, spawn } = require('child_process');
+
 
 app.post('/transform-run', async (req, res) => {
     const filePath = path.join(__dirname, 'Main.java');
