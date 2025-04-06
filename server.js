@@ -17,7 +17,7 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 let svgTermPath = null;
 
 // Middleware setup
-app.use(express.json({ limit: '1mb' }));
+app.use(express.text({ limit: '1mb' })); // Changed from express.json() to express.text()
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -120,7 +120,7 @@ public class Main {
 app.post('/transform-run', async (req, res) => {
   const timestamp = Date.now();
   const requestTempDir = path.join(TEMP_DIR, `request-${timestamp}`);
-  const filePath = path.join(requestTempDir, 'Main.java'); // Fixed file name
+  const filePath = path.join(requestTempDir, 'Main.java');
   const asciinemaFile = path.join(requestTempDir, `session-${timestamp}.cast`);
   const svgFile = path.join(requestTempDir, `output-${timestamp}.svg`);
 
@@ -128,14 +128,14 @@ app.post('/transform-run', async (req, res) => {
     // Create a unique temp directory for this request
     await fs.mkdir(requestTempDir, { recursive: true });
 
-    // Validate and extract request body
-    const { code, options } = req.body;
+    // Validate and extract request body (now plain text)
+    const code = req.body;
     if (!code || typeof code !== 'string') {
-      return res.status(400).send("Invalid input: 'code' must be a non-empty string.");
+      return res.status(400).send("Invalid input: code must be a non-empty string.");
     }
 
-    // Transform code with user options
-    const transformedCode = transformJavaCode(code, options);
+    // Transform code with default options (no options from client anymore)
+    const transformedCode = transformJavaCode(code);
     await fs.writeFile(filePath, transformedCode, 'utf8');
 
     // Cache svg-term path if not already set
