@@ -76,7 +76,7 @@ public class Main {
 `.trim();
 }
 
-// POST endpoint
+// POST endpoint to transform and execute the code
 app.post('/transform-run', async (req, res) => {
     try {
         const userCode = req.body.code;
@@ -95,10 +95,12 @@ app.post('/transform-run', async (req, res) => {
     }
 });
 
+// Basic GET route
 app.get('/', (req, res) => {
     res.send('Recursion visualizer backend is up');
 });
 
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
