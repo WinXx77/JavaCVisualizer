@@ -1,7 +1,6 @@
 const express = require('express');
 const fs = require('fs').promises;
-const { exec, spawn } = require('child_process');
-
+const { exec } = require('child_process');
 const path = require('path');
 
 const app = express();
@@ -9,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '1mb' }));
 
-// Transforms user's Java code into an ultimate visualization
+// Function to transform user's recursive Java code into a visualized version
 function transformJavaCode(inputCode) {
     const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
     if (!match) throw new Error('No valid recursive int method found in the input code.');
@@ -90,9 +89,7 @@ public class Main {
 `.trim();
 }
 
-// POST endpoint to transform and execute the code
-
-
+// POST endpoint: transforms code, compiles, records execution, converts to SVG
 app.post('/transform-run', async (req, res) => {
     const filePath = path.join(__dirname, 'Main.java');
     const asciinemaFile = path.join(__dirname, 'session.cast');
@@ -107,46 +104,49 @@ app.post('/transform-run', async (req, res) => {
         const transformedCode = transformJavaCode(userCode);
         await fs.writeFile(filePath, transformedCode, 'utf8');
 
-        // Compile the code
+        // Cleanup existing recordings
+        await fs.unlink(asciinemaFile).catch(() => {});
+        await fs.unlink(svgFile).catch(() => {});
+
+        // Compile Java
         await execPromise(`javac -encoding UTF-8 Main.java`);
 
-        // Run Java program using asciinema
-        await execPromise(`TERM=xterm asciinema rec -y --overwrite --stdin --command="java Main" ${asciinemaFile}`);
+        // Record execution using asciinema
+        await execPromise(`TERM=xterm asciinema rec -y --stdin --command="java Main" ${asciinemaFile}`);
 
+        // Ensure svg-term exists
+        const svgTermPath = (await execPromise(`which svg-term`)).trim();
 
+        // Convert terminal session to SVG
+        await execPromise(`${svgTermPath} --in ${asciinemaFile} --out ${svgFile} --window --frame --no-cursor`);
 
-
-        // Convert to SVG
-        await execPromise(`svg-term --in ${asciinemaFile} --out ${svgFile} --window --frame --no-cursor`);
-
+        // Read SVG content
         const svg = await fs.readFile(svgFile, 'utf8');
 
-        // Cleanup
+        // Cleanup temp files
         await fs.unlink(filePath).catch(() => {});
         await fs.unlink(asciinemaFile).catch(() => {});
         await fs.unlink(svgFile).catch(() => {});
 
         res.setHeader('Content-Type', 'image/svg+xml');
         res.send(svg);
-
     } catch (e) {
         await fs.unlink(filePath).catch(() => {});
         res.status(500).send(`Error: ${e.message}`);
     }
 });
 
-// Utility to promisify exec
+// Utility function to wrap exec in a Promise
 function execPromise(cmd) {
     return new Promise((resolve, reject) => {
-        exec(cmd, { maxBuffer: 1024 * 500 }, (err, stdout, stderr) => {
-            if (err) return reject(err);
+        exec(cmd, { maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) return reject(new Error(stderr || err.message));
             resolve(stdout);
         });
     });
 }
 
-
-// Basic GET route
+// Basic test route
 app.get('/', (req, res) => {
     res.send('Recursion visualizer backend is up');
 });
