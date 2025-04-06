@@ -23,3 +23,5 @@ EXPOSE 3000
 
 # Start the server
 CMD ["node", "server.js"]
+
+ENV LANG=C.UTF-8

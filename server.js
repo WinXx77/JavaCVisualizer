@@ -84,7 +84,8 @@ app.post('/transform-run', async (req, res) => {
         const filePath = path.join(__dirname, 'Main.java');
         fs.writeFileSync(filePath, transformedCode);
 
-        exec(`javac Main.java && java Main`, { timeout: 10000 }, (err, stdout, stderr) => {
+        // Add -encoding UTF-8 to the javac command
+        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 10000 }, (err, stdout, stderr) => {
             if (err) {
                 return res.status(500).send("Compilation/Execution error:\n" + stderr);
             }
