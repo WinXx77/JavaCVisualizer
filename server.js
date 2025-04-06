@@ -1,21 +1,48 @@
 const express = require('express');
 const fs = require('fs').promises;
+const { createReadStream } = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const TEMP_DIR = path.join(__dirname, 'temp');
 
+// Cached svg-term path to avoid repeated system calls
+let svgTermPath = null;
+
+// Middleware setup
 app.use(express.json({ limit: '1mb' }));
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per window
+    message: 'Too many requests from this IP, please try again later.',
+  })
+);
 
-// Function to transform user's recursive Java code into a visualized version
-function transformJavaCode(inputCode) {
-    const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
-    if (!match) throw new Error('No valid recursive int method found in the input code.');
-    const functionName = match[1];
-    const param = match[2];
+// Ensure temp directory exists
+async function ensureTempDir() {
+  try {
+    await fs.mkdir(TEMP_DIR, { recursive: true });
+  } catch (e) {
+    console.error('Failed to create temp directory:', e.message);
+  }
+}
 
-    return `
+// Transform user's recursive Java code into a visualized version
+function transformJavaCode(inputCode, options = { sleep: 600 }) {
+  const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
+  if (!match) throw new Error('No valid recursive int method found in the input code.');
+  const functionName = match[1];
+  const param = match[2];
+
+  return `
 public class Main {
     public static int ${functionName}(int ${param}, int depth) throws InterruptedException {
         String indent = "  ".repeat(depth);
@@ -25,44 +52,44 @@ public class Main {
         System.out.println(indent + "╔════════════════════════════════════╗");
         System.out.println(indent + "║ [+] CALL: ${functionName}(" + ${param} + ")  [Depth: " + depth + "]      ║");
         System.out.println(indent + "╚════════════════════════════════════╝");
-        Thread.sleep(600);
+        Thread.sleep(${options.sleep});
 
         // Stack and memory state
         System.out.println(indent + treeIndent + "├── Stack Push: ${functionName}(" + ${param} + ")");
         System.out.println(indent + treeIndent + "│   Memory: ${param} = " + ${param});
-        Thread.sleep(400);
+        Thread.sleep(${options.sleep / 2});
 
         if (${param} == 0) {
             System.out.println(indent + treeIndent + "├── [BASE CASE]");
             System.out.println(indent + treeIndent + "│   Condition: " + ${param} + " == 0");
-            Thread.sleep(400);
+            Thread.sleep(${options.sleep / 2});
             System.out.println(indent + treeIndent + "│   Action: Returning 1");
-            Thread.sleep(400);
+            Thread.sleep(${options.sleep / 2});
             System.out.println(indent + "╔════════════════════════════════════╗");
             System.out.println(indent + "║ [-] RETURN: 1 from ${functionName}(0)         ║");
             System.out.println(indent + "╚════════════════════════════════════╝");
-            Thread.sleep(600);
+            Thread.sleep(${options.sleep});
             return 1;
         }
 
         int nextParam = ${param} - 1;
         System.out.println(indent + treeIndent + "├── Compute: " + ${param} + " * ${functionName}(" + nextParam + ")");
-        Thread.sleep(400);
+        Thread.sleep(${options.sleep / 2});
         System.out.println(indent + treeIndent + "└── Diving into ${functionName}(" + nextParam + ") --->");
-        Thread.sleep(600);
+        Thread.sleep(${options.sleep});
 
         int result = ${functionName}(nextParam, depth + 1);
 
         // Return visualization
         System.out.println(indent + treeIndent + "┌── Returned: " + result + " from ${functionName}(" + nextParam + ")");
-        Thread.sleep(400);
+        Thread.sleep(${options.sleep / 2});
         System.out.println(indent + treeIndent + "├── Result: " + ${param} + " * " + result + " = " + (${param} * result));
         System.out.println(indent + treeIndent + "│   Memory Updated: ${param} = " + (${param} * result));
-        Thread.sleep(400);
+        Thread.sleep(${options.sleep / 2});
         System.out.println(indent + "╔════════════════════════════════════╗");
         System.out.println(indent + "║ [-] RETURN: " + (${param} * result) + " from ${functionName}(" + ${param} + ")  ║");
         System.out.println(indent + "╚════════════════════════════════════╝");
-        Thread.sleep(600);
+        Thread.sleep(${options.sleep});
 
         return ${param} * result;
     }
@@ -89,70 +116,83 @@ public class Main {
 `.trim();
 }
 
-// POST endpoint: transforms code, compiles, records execution, converts to SVG
+// POST endpoint: transforms code, compiles, runs, and streams SVG
 app.post('/transform-run', async (req, res) => {
-    const filePath = path.join(__dirname, 'Main.java');
-    const asciinemaFile = path.join(__dirname, 'session.cast');
-    const svgFile = path.join(__dirname, 'output.svg');
+  const timestamp = Date.now();
+  const filePath = path.join(TEMP_DIR, `Main-${timestamp}.java`);
+  const asciinemaFile = path.join(TEMP_DIR, `session-${timestamp}.cast`);
+  const svgFile = path.join(TEMP_DIR, `output-${timestamp}.svg`);
 
-    try {
-        const userCode = req.body.code;
-        if (!userCode || typeof userCode !== 'string') {
-            return res.status(400).send("Invalid input: 'code' must be a non-empty string.");
-        }
+  try {
+    await ensureTempDir();
 
-        const transformedCode = transformJavaCode(userCode);
-        await fs.writeFile(filePath, transformedCode, 'utf8');
-
-        // Cleanup existing recordings
-        await fs.unlink(asciinemaFile).catch(() => {});
-        await fs.unlink(svgFile).catch(() => {});
-
-        // Compile Java
-        await execPromise(`javac -encoding UTF-8 Main.java`);
-
-        // Record execution using asciinema
-        await execPromise(`TERM=xterm asciinema rec -y --stdin --command="java Main" ${asciinemaFile}`);
-
-        // Ensure svg-term exists
-        const svgTermPath = (await execPromise(`which svg-term`)).trim();
-
-        // Convert terminal session to SVG
-        await execPromise(`${svgTermPath} --in ${asciinemaFile} --out ${svgFile} --window --no-cursor`);
-
-
-        // Read SVG content
-        const svg = await fs.readFile(svgFile, 'utf8');
-
-        // Cleanup temp files
-        await fs.unlink(filePath).catch(() => {});
-        await fs.unlink(asciinemaFile).catch(() => {});
-        await fs.unlink(svgFile).catch(() => {});
-
-        res.setHeader('Content-Type', 'image/svg+xml');
-        res.send(svg);
-    } catch (e) {
-        await fs.unlink(filePath).catch(() => {});
-        res.status(500).send(`Error: ${e.message}`);
+    // Validate and extract request body
+    const { code, options } = req.body;
+    if (!code || typeof code !== 'string') {
+      return res.status(400).send("Invalid input: 'code' must be a non-empty string.");
     }
+
+    // Transform code with user options
+    const transformedCode = transformJavaCode(code, options);
+    await fs.writeFile(filePath, transformedCode, 'utf8');
+
+    // Cache svg-term path if not already set
+    if (!svgTermPath) {
+      svgTermPath = (await execPromise('which svg-term')).trim();
+    }
+
+    // Compile Java code
+    await execPromise(`javac -encoding UTF-8 ${filePath}`, { timeout: 10000 });
+
+    // Record execution with asciinema
+    await execPromise(
+      `TERM=xterm asciinema rec -y --stdin --command="java -cp ${TEMP_DIR} Main" ${asciinemaFile}`,
+      { timeout: 30000 }
+    );
+
+    // Convert to SVG
+    await execPromise(`${svgTermPath} --in ${asciinemaFile} --out ${svgFile} --window --no-cursor`, {
+      timeout: 10000,
+    });
+
+    // Stream SVG response
+    res.setHeader('Content-Type', 'image/svg+xml');
+    createReadStream(svgFile).pipe(res).on('error', (e) => {
+      res.status(500).send(`Streaming error: ${e.message}`);
+    });
+  } catch (e) {
+    res.status(500).send(`Error: ${e.message}`);
+  } finally {
+    // Cleanup temporary files
+    await Promise.all([
+      fs.unlink(filePath).catch(() => {}),
+      fs.unlink(asciinemaFile).catch(() => {}),
+      fs.unlink(svgFile).catch(() => {}),
+    ]);
+  }
 });
 
-// Utility function to wrap exec in a Promise
-function execPromise(cmd) {
-    return new Promise((resolve, reject) => {
-        exec(cmd, { maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) return reject(new Error(stderr || err.message));
-            resolve(stdout);
-        });
-    });
+// Utility function to wrap exec in a Promise with timeout
+function execPromise(cmd, options = {}) {
+  return new Promise((resolve, reject) => {
+    exec(
+      cmd,
+      { maxBuffer: 1024 * 1024, ...options },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        resolve(stdout);
+      }
+    );
+  });
 }
 
-// Basic test route
+// Health check endpoint
 app.get('/', (req, res) => {
-    res.send('Recursion visualizer backend is up');
+  res.send('Recursion visualizer backend is up and running');
 });
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Temporary files will be stored in: ${TEMP_DIR}`);
 });
