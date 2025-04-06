@@ -27,5 +27,7 @@ EXPOSE 3000
 # Set environment
 ENV LANG=C.UTF-8
 
+ENV TERM=xterm
+
 # Start server
 CMD ["node", "server.js"]

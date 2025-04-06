@@ -111,7 +111,8 @@ app.post('/transform-run', async (req, res) => {
         await execPromise(`javac -encoding UTF-8 Main.java`);
 
         // Run Java program using asciinema
-        await execPromise(`asciinema rec -c "java Main" -y ${asciinemaFile}`);
+        await execPromise(`script -q -c "java Main" ${asciinemaFile}`);
+
 
         // Convert to SVG
         await execPromise(`svg-term --in ${asciinemaFile} --out ${svgFile} --window --frame --no-cursor`);
