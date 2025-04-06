@@ -6,10 +6,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Use built-in Express JSON parser instead of separate body-parser
 app.use(express.json({ limit: '1mb' }));
 
-// Transforms user's Java code into an animated, interactive trace version
+// Transforms user's Java code into an ultimate visualization
 function transformJavaCode(inputCode) {
     const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
     if (!match) throw new Error('No valid recursive int method found in the input code.');
@@ -19,53 +18,72 @@ function transformJavaCode(inputCode) {
     return `
 public class Main {
     public static int ${functionName}(int ${param}, int depth) throws InterruptedException {
-        String indent = "  ".repeat(depth); // Simple space-based indentation
+        String indent = "  ".repeat(depth);
+        String treeIndent = "| ".repeat(depth);
 
-        System.out.println(indent + "[+] ----> Entering ${functionName}(" + ${param} + ") [Depth: " + depth + "]");
-        Thread.sleep(500); // Slower for better visibility
+        // Entry visualization
+        System.out.println(indent + "╔════════════════════════════════════╗");
+        System.out.println(indent + "║ [+] CALL: ${functionName}(" + ${param} + ")  [Depth: " + depth + "]      ║");
+        System.out.println(indent + "╚════════════════════════════════════╝");
+        Thread.sleep(600);
 
-        System.out.println(indent + "    | Stack: ${functionName}(" + ${param} + ")");
-        Thread.sleep(300);
+        // Stack and memory state
+        System.out.println(indent + treeIndent + "├── Stack Push: ${functionName}(" + ${param} + ")");
+        System.out.println(indent + treeIndent + "│   Memory: ${param} = " + ${param});
+        Thread.sleep(400);
 
         if (${param} == 0) {
-            System.out.println(indent + "    | [Base Case] " + ${param} + " == 0");
-            Thread.sleep(300);
-            System.out.println(indent + "    | Preparing to return 1");
-            Thread.sleep(300);
-            System.out.println(indent + "[-] <---- Returning 1 from ${functionName}(0)");
-            Thread.sleep(500);
+            System.out.println(indent + treeIndent + "├── [BASE CASE]");
+            System.out.println(indent + treeIndent + "│   Condition: " + ${param} + " == 0");
+            Thread.sleep(400);
+            System.out.println(indent + treeIndent + "│   Action: Returning 1");
+            Thread.sleep(400);
+            System.out.println(indent + "╔════════════════════════════════════╗");
+            System.out.println(indent + "║ [-] RETURN: 1 from ${functionName}(0)         ║");
+            System.out.println(indent + "╚════════════════════════════════════╝");
+            Thread.sleep(600);
             return 1;
         }
 
         int nextParam = ${param} - 1;
-        System.out.println(indent + "    | Will compute: " + ${param} + " * ${functionName}(" + nextParam + ")");
-        Thread.sleep(300);
-        System.out.println(indent + "    | ----> Calling ${functionName}(" + nextParam + ")");
-        Thread.sleep(500);
+        System.out.println(indent + treeIndent + "├── Compute: " + ${param} + " * ${functionName}(" + nextParam + ")");
+        Thread.sleep(400);
+        System.out.println(indent + treeIndent + "└── Diving into ${functionName}(" + nextParam + ") --->");
+        Thread.sleep(600);
 
         int result = ${functionName}(nextParam, depth + 1);
 
-        System.out.println(indent + "    | <---- Returned " + result + " from ${functionName}(" + nextParam + ")");
-        Thread.sleep(300);
-        System.out.println(indent + "    | Computing: " + ${param} + " * " + result + " = " + (${param} * result));
-        Thread.sleep(300);
-        System.out.println(indent + "[-] <---- Returning " + (${param} * result) + " from ${functionName}(" + ${param} + ")");
-        Thread.sleep(500);
+        // Return visualization
+        System.out.println(indent + treeIndent + "┌── Returned: " + result + " from ${functionName}(" + nextParam + ")");
+        Thread.sleep(400);
+        System.out.println(indent + treeIndent + "├── Result: " + ${param} + " * " + result + " = " + (${param} * result));
+        System.out.println(indent + treeIndent + "│   Memory Updated: ${param} = " + (${param} * result));
+        Thread.sleep(400);
+        System.out.println(indent + "╔════════════════════════════════════╗");
+        System.out.println(indent + "║ [-] RETURN: " + (${param} * result) + " from ${functionName}(" + ${param} + ")  ║");
+        System.out.println(indent + "╚════════════════════════════════════╝");
+        Thread.sleep(600);
 
         return ${param} * result;
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int input = 3; // Smaller input for testing
-        System.out.println("=====================================");
-        System.out.println("Starting Interactive Trace for ${functionName}(" + input + "):");
-        System.out.println("=====================================");
+        int input = 3;
+        System.out.println("╔════════════════════════════════════════════════════╗");
+        System.out.println("║       ULTIMATE RECURSION VISUALIZER                ║");
+        System.out.println("║       Tracing ${functionName}(" + input + ")                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        Thread.sleep(1000);
+        System.out.println(">>> STARTING EXECUTION <<<");
         Thread.sleep(500);
+
         int result = ${functionName}(input, 0);
+
         Thread.sleep(500);
-        System.out.println("=====================================");
-        System.out.println("Final Result: " + result);
-        System.out.println("=====================================");
+        System.out.println(">>> EXECUTION COMPLETE <<<");
+        System.out.println("╔════════════════════════════════════════════════════╗");
+        System.out.println("║       FINAL RESULT: " + result + "                           ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
     }
 }
 `.trim();
@@ -87,7 +105,7 @@ app.post('/transform-run', async (req, res) => {
         await fs.writeFile(filePath, transformedCode, { encoding: 'utf8' });
         console.log("File written successfully:", filePath);
 
-        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 15000 }, (err, stdout, stderr) => {
+        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 20000 }, (err, stdout, stderr) => {
             fs.unlink(filePath).catch((unlinkErr) => {
                 console.error("Failed to delete file:", unlinkErr);
             });
