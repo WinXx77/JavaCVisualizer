@@ -1,5 +1,4 @@
 const express = require('express');
-const bodyParser = require('bodyParser');
 const fs = require('fs').promises;
 const { exec } = require('child_process');
 const path = require('path');
@@ -7,7 +6,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.json({ limit: '1mb' }));
+// Use built-in Express JSON parser instead of separate body-parser
+app.use(express.json({ limit: '1mb' }));
 
 // Transforms user's Java code into an animated, interactive trace version
 function transformJavaCode(inputCode) {
