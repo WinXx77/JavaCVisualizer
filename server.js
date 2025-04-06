@@ -37,19 +37,21 @@ public class Main {
             return 1;
         }
 
-        printWithDelay(indent + "|   Will compute: " + ${param} + " * ${functionName}(" + (${param} + " - 1)", 400);
-        printWithDelay(indent + "|   Saving state: waiting for result of ${functionName}(" + (${param} + " - 1)", 300);
-        printWithDelay(indent + "|   Calling ${functionName}(" + (${param} + " - 1) + ") at depth " + (depth + 1), 300);
-        printWithDelay(indent + "|   Going deeper into ${functionName}(" + (${param} + " - 1) + ")", 300);
+        printWithDelay(indent + "|   Will compute: " + ${param} + " * ${functionName}(" + (${param} - 1) + ")", 400);
+        printWithDelay(indent + "|   Saving state: waiting for result of ${functionName}(" + (${param} - 1) + ")", 300);
+        printWithDelay(indent + "|   Calling ${functionName}(" + (${param} - 1) + ") at depth " + (depth + 1), 300);
+        printWithDelay(indent + "|   Going deeper into ${functionName}(" + (${param} - 1) + ")", 300);
 
         int recursiveResult = ${functionName}(${param} - 1, depth + 1);
 
-        printWithDelay(indent + "|   Returned from ${functionName}(" + (${param} + " - 1) + ") with result " + recursiveResult, 300);
+        printWithDelay(indent + "|   Returned from ${functionName}(" + (${param} - 1) + ") with result " + recursiveResult, 300);
+
         int result = ${param} * recursiveResult;
         printWithDelay(indent + "|   Computing: " + ${param} + " * " + recursiveResult + " = " + result, 400);
         printWithDelay(indent + "|   Computation complete for ${functionName}(" + ${param} + ")", 300);
         printWithDelay(indent + "|   Storing result " + result + " temporarily", 300);
-        printWithDelay(indent + "|   Stack trace: ${functionName}(" + ${param} + ") -> ${functionName}(" + (${param} + " - 1)", 300);
+        printWithDelay(indent + "|   Stack trace: ${functionName}(" + ${param} + ") -> ${functionName}(" + (${param} - 1) + ")", 300);
+
         printWithDelay(indent + "|   Cleaning up temporary memory used for ${functionName}(" + ${param} + ")", 300);
         printWithDelay(indent + "|   Popping state from stack for ${param} = " + ${param}, 300);
         printWithDelay(indent + "|   Preparing to return result to caller", 300);
