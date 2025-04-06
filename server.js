@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const fs = require('fs');
+const fs = require('fs').promises; // Using promises for cleaner async handling
 const { exec } = require('child_process');
 const path = require('path');
 
@@ -9,57 +9,42 @@ const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json({ limit: '1mb' }));
 
-// Transforms user's Java code into an animated trace version
+// Transforms user's Java code into animated trace version
 function transformJavaCode(inputCode) {
-    // Extract function name and parameter from the user's code
     const match = inputCode.match(/int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*int\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
     if (!match) throw new Error('No valid recursive int method found in the input code.');
     const functionName = match[1];
     const param = match[2];
 
-    // Generate the transformed Java code with proper string handling
+    // Minimal, ASCII-only, error-free Java code
     return `
 public class Main {
     public static int ${functionName}(int ${param}, int depth) throws InterruptedException {
-        String indent = "|   ".repeat(depth); // Using ASCII '|' for simplicity and compatibility
+        String indent = "  ".repeat(depth); // Simple spaces for indentation
+        System.out.println(indent + "Entering ${functionName}(" + ${param} + ")");
+        Thread.sleep(300);
 
-        // Entering the function
-        printWithDelay(indent + "---> Entering ${functionName}(" + ${param} + ")", 400);
-        printWithDelay(indent + "    Recursion depth: " + depth, 300);
-        printWithDelay(indent + "    Checking base case: " + ${param} + " == 0", 300);
-
-        // Base case
         if (${param} == 0) {
-            printWithDelay(indent + "    Base case reached, returning 1", 300);
-            printWithDelay(indent + "<--- Returning 1 from ${functionName}(0)", 400);
+            System.out.println(indent + "Base case: ${param} == 0, returning 1");
+            Thread.sleep(300);
+            System.out.println(indent + "Returning 1");
             return 1;
         }
 
-        // Recursive case
-        int nextParam = ${param} - 1;
-        printWithDelay(indent + "    Will compute: " + ${param} + " * ${functionName}(" + nextParam + ")", 400);
-        printWithDelay(indent + "    Calling ${functionName}(" + nextParam + ") at depth " + (depth + 1), 300);
-
-        int recursiveResult = ${functionName}(nextParam, depth + 1);
-
-        printWithDelay(indent + "    Returned from ${functionName}(" + nextParam + ") with " + recursiveResult, 300);
-        int result = ${param} * recursiveResult;
-        printWithDelay(indent + "    Computed: " + ${param} + " * " + recursiveResult + " = " + result, 400);
-        printWithDelay(indent + "<--- Returning " + result + " from ${functionName}(" + ${param} + ")", 400);
-
-        return result;
-    }
-
-    public static void printWithDelay(String msg, int ms) throws InterruptedException {
-        System.out.println(msg);
-        Thread.sleep(ms);
+        System.out.println(indent + "Calling ${functionName}(" + (${param} - 1) + ")");
+        Thread.sleep(300);
+        int result = ${functionName}(${param} - 1, depth + 1);
+        System.out.println(indent + "Computed ${param} * " + result + " = " + (${param} * result));
+        Thread.sleep(300);
+        System.out.println(indent + "Returning " + (${param} * result));
+        return ${param} * result;
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int input = 5; // Default input value
-        System.out.println("Animated Recursion Trace for ${functionName}(" + input + "):\\n");
+        int input = 3; // Smaller input for faster testing
+        System.out.println("Starting trace for ${functionName}(" + input + "):");
         int result = ${functionName}(input, 0);
-        printWithDelay("\\nFinal Result: " + result, 0);
+        System.out.println("Final result: " + result);
     }
 }
 `.trim();
@@ -67,32 +52,42 @@ public class Main {
 
 // POST endpoint to transform and execute the code
 app.post('/transform-run', async (req, res) => {
+    const filePath = path.join(__dirname, 'Main.java');
+
     try {
         const userCode = req.body.code;
         if (!userCode || typeof userCode !== 'string') {
             return res.status(400).send("Invalid input: 'code' must be a non-empty string.");
         }
 
+        // Transform the code
         const transformedCode = transformJavaCode(userCode);
-        const filePath = path.join(__dirname, 'Main.java');
+        console.log("Generated Java code:\n", transformedCode); // Log the generated code
 
-        // Write the file with explicit UTF-8 encoding
-        fs.writeFileSync(filePath, transformedCode, { encoding: 'utf8' });
+        // Write the file
+        await fs.writeFile(filePath, transformedCode, { encoding: 'utf8' });
+        console.log("File written successfully:", filePath);
 
-        // Compile and run with UTF-8 encoding
-        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 15000 }, (err, stdout, stderr) => {
-            // Clean up the generated file regardless of success or failure
-            fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error(`Failed to delete ${filePath}: ${unlinkErr}`);
+        // Compile and execute
+        exec(`javac -encoding UTF-8 Main.java && java Main`, { timeout: 10000 }, (err, stdout, stderr) => {
+            // Clean up the file
+            fs.unlink(filePath).catch((unlinkErr) => {
+                console.error("Failed to delete file:", unlinkErr);
             });
 
             if (err) {
-                console.error("Execution error:", stderr);
-                return res.status(500).send("Compilation/Execution error:\n" + stderr);
+                console.error("Execution stderr:", stderr);
+                console.error("Execution error:", err);
+                return res.status(500).send(`Execution failed:\n${stderr || err.message}`);
             }
+
+            console.log("Execution stdout:", stdout);
             res.send(stdout);
         });
     } catch (e) {
+        // Clean up on error
+        await fs.unlink(filePath).catch(() => {});
+        console.error("Transformation error:", e);
         res.status(400).send("Transformation failed: " + e.message);
     }
 });
