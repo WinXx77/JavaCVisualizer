@@ -111,7 +111,8 @@ app.post('/transform-run', async (req, res) => {
         await execPromise(`javac -encoding UTF-8 Main.java`);
 
         // Run Java program using asciinema
-        await execPromise(`TERM=xterm asciinema rec -y --stdin --command="java Main" ${asciinemaFile}`);
+        await execPromise(`TERM=xterm asciinema rec -y --overwrite --stdin --command="java Main" ${asciinemaFile}`);
+
 
 
 
