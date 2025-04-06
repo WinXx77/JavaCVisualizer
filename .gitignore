@@ -1,0 +1,21 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Env files
+.env
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+
+# Dependency lock files (optional if you're using npm ci)
+.package-lock.json
