@@ -118,7 +118,8 @@ app.post('/transform-run', async (req, res) => {
         const svgTermPath = (await execPromise(`which svg-term`)).trim();
 
         // Convert terminal session to SVG
-        await execPromise(`${svgTermPath} --in ${asciinemaFile} --out ${svgFile} --window --frame --no-cursor`);
+        await execPromise(`${svgTermPath} --in ${asciinemaFile} --out ${svgFile} --window --no-cursor`);
+
 
         // Read SVG content
         const svg = await fs.readFile(svgFile, 'utf8');
