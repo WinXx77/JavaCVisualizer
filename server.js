@@ -45,13 +45,11 @@ public class Main {
         int recursiveResult = ${functionName}(${param} - 1, depth + 1);
 
         printWithDelay(indent + "|   Returned from ${functionName}(" + (${param} - 1) + ") with result " + recursiveResult, 300);
-
         int result = ${param} * recursiveResult;
         printWithDelay(indent + "|   Computing: " + ${param} + " * " + recursiveResult + " = " + result, 400);
         printWithDelay(indent + "|   Computation complete for ${functionName}(" + ${param} + ")", 300);
         printWithDelay(indent + "|   Storing result " + result + " temporarily", 300);
         printWithDelay(indent + "|   Stack trace: ${functionName}(" + ${param} + ") -> ${functionName}(" + (${param} - 1) + ")", 300);
-
         printWithDelay(indent + "|   Cleaning up temporary memory used for ${functionName}(" + ${param} + ")", 300);
         printWithDelay(indent + "|   Popping state from stack for ${param} = " + ${param}, 300);
         printWithDelay(indent + "|   Preparing to return result to caller", 300);
@@ -77,6 +75,7 @@ public class Main {
 }
 `.trim();
 }
+
 
 // POST endpoint to transform and execute the code
 app.post('/transform-run', async (req, res) => {
